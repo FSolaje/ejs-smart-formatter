@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Hook Universal de Pre-Push (Gobernanza de IA y Sincronización Remota)
+# ==============================================================================
+# 1. Alerta ante push directo o descuidado a la rama principal 'main'
+# 2. Validación de convención de nombres de rama
+# 3. Comprobación de seguridad previa a la publicación en remoto
+# ==============================================================================
+
+set -eo pipefail
+
+REMOTE="$1"
+URL="$2"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+echo "🔍 [Hook Pre-push] Verificando condiciones de sincronización remota con '$REMOTE'..."
+
+# Cargar convención personalizada de ramas si existe en el proyecto
+CONVENTION_FILE="$REPO_ROOT/.agent/hooks/branch_convention.env"
+if [ -f "$CONVENTION_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$CONVENTION_FILE"
+fi
+
+# Expresión regular estándar por defecto (GitFlow, Trunk-Based, Releases y Jerarquías Multirrama)
+DEFAULT_BRANCH_REGEX='^(main|develop|dev/(feature|fix)/[a-zA-Z0-9._-]+|feature/[a-zA-Z0-9._-]+|fix/[a-zA-Z0-9._-]+|hotfix/[a-zA-Z0-9._-]+|release/v[0-9.]+(-[a-zA-Z0-9.]+)?|ra[0-9]{2}/ut[0-9]+-[a-zA-Z0-9._-]+(|/(main|base|dev(|/[a-zA-Z0-9._-]+)|fix/[a-zA-Z0-9._-]+|release/v[0-9.]+(-[a-zA-Z0-9.]+)?)))$'
+VALID_BRANCH_REGEX="${BRANCH_NAMING_REGEX:-$DEFAULT_BRANCH_REGEX}"
+
+# Leer referencias que se intentan subir: <local ref> <local sha1> <remote ref> <remote sha1>
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+    if [ "$LOCAL_SHA" = "0000000000000000000000000000000000000000" ]; then
+        # Eliminación de rama remota
+        continue
+    fi
+
+    BRANCH_NAME="${REMOTE_REF#refs/heads/}"
+
+    # 1. Advertencia ante push a main
+    if [ "$BRANCH_NAME" = "main" ]; then
+        echo "  ℹ️  [Aviso Gobernanza] Se está realizando un push a la rama principal 'main'."
+        echo "     Asegúrate de que este despliegue cuenta con revisión y aprobación previa."
+    fi
+
+    # 2. Validación de nomenclatura de ramas
+    if ! [[ "$BRANCH_NAME" =~ $VALID_BRANCH_REGEX ]]; then
+        echo "⚠️  [ADVERTENCIA] El nombre de la rama '$BRANCH_NAME' no sigue el estándar recomendado:"
+        echo "   - Ramas principales: main, develop"
+        echo "   - Ramas de funcionalidad: dev/feature/<nombre> o feature/<nombre>"
+        echo "   - Ramas de corrección:    dev/fix/<nombre> o fix/<nombre>"
+        echo "   - Ramas de release:       release/v<X.Y.Z>"
+        echo "   - Ramas jerárquicas:      ra<XX>/ut<Y>-<nombre>/(main|dev|fix|release/v<X.Y.Z>)"
+        echo "   (Para personalizar este regex, define BRANCH_NAMING_REGEX en .agent/hooks/branch_convention.env)."
+    fi
+done
+
+echo "  ✔ [Pre-push] Verificaciones de sincronización remota superadas."
+exit 0

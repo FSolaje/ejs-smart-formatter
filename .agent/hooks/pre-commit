@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Hook Universal de Pre-Commit (Gobernanza de IA y Puerta de Calidad/Seguridad)
+# ==============================================================================
+# Fases de Validación:
+#   1. Telemetría y Live Tracking: Sincronización automática de PROXIMOS_PASOS.md
+#   2. Blindaje de Inmutabilidad: Protección del núcleo (.agent/hooks, AGENTS.md)
+#   3. Escáner SAST de Staging: Bloqueo de user_data, secretos y rutas privadas
+#   4. Hook Chaining Local: Ejecución de pre-commit-local.sh (si existe)
+# ==============================================================================
+
+set -eo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+TRACKING_FILE="$REPO_ROOT/PROXIMOS_PASOS.md"
+
+echo "🔍 [Hook Pre-commit] Iniciando verificaciones automáticas de calidad y seguridad..."
+
+# ------------------------------------------------------------------------------
+# 1. Telemetría y Live Tracking de Git en PROXIMOS_PASOS.md
+# ------------------------------------------------------------------------------
+if [ -f "$TRACKING_FILE" ]; then
+    BRANCH="$(git branch --show-current 2>/dev/null || true)"
+    if [ -z "$BRANCH" ]; then
+        BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo 'main')"
+    fi
+    LAST_COMMIT="$(git log -1 --format='%h — *%s*' 2>/dev/null || true)"
+    [ -z "$LAST_COMMIT" ] && LAST_COMMIT="Inicial"
+    NOW="$(date '+%Y-%m-%d %H:%M')"
+
+    # Actualizar campos de telemetría preservando el resto del archivo
+    sed -i "s|^- \*\*Rama activa:\*\*.*|- **Rama activa:** \`$BRANCH\`|" "$TRACKING_FILE"
+    sed -i "s|^- \*\*Último commit consolidado:\*\*.*|- **Último commit consolidado:** \`$LAST_COMMIT\`|" "$TRACKING_FILE"
+    sed -i "s|^- \*\*Fecha de última sincronización:\*\*.*|- **Fecha de última sincronización:** $NOW|" "$TRACKING_FILE"
+
+    # Incorporar al staging de Git si hubo cambios
+    git add "$TRACKING_FILE"
+    echo "  ✔ [Live Tracking] PROXIMOS_PASOS.md sincronizado con Git ($BRANCH | $NOW)."
+fi
+
+# ------------------------------------------------------------------------------
+# 2. Blindaje de Inmutabilidad del Núcleo de Gobernanza en Ramas Secundarias
+# ------------------------------------------------------------------------------
+CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+[ -z "$CURRENT_BRANCH" ] && CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+
+if [ "$CURRENT_BRANCH" != "main" ] && [ -n "$CURRENT_BRANCH" ]; then
+    PROTECTED_CORE_ITEMS=(
+        ".agent/hooks"
+        ".agent/rules/AGENTS.md"
+    )
+
+    for item in "${PROTECTED_CORE_ITEMS[@]}"; do
+        if git diff --cached --name-only -- "$item" 2>/dev/null | grep -q .; then
+            DIFF_WITH_MAIN=$(git diff --cached origin/main -- "$item" 2>/dev/null || git diff --cached main -- "$item" 2>/dev/null || true)
+            if [ -n "$DIFF_WITH_MAIN" ]; then
+                if [ "${ALLOW_GLOBAL_OVERRIDE:-false}" != "true" ]; then
+                    echo "❌ [ERROR DE GOBERNANZA - NÚCLEO INMUTABLE]"
+                    echo "   Se intentan confirmar modificaciones no autorizadas en el activo central: '$item'"
+                    echo "   Este componente transversal solo puede modificarse y evolucionar en la rama 'main'."
+                    echo "   Para aplicar cambios legítimos al núcleo:"
+                    echo "     1. Cambia a 'main' (git switch main)."
+                    echo "     2. Aplica y justifica el cambio mediante Conventional Commits."
+                    echo "     3. Sincroniza hacia tu rama (git restore --source=main -- $item)."
+                    echo "   (Para overrides excepcionales debidamente auditados: export ALLOW_GLOBAL_OVERRIDE=true)."
+                    exit 1
+                else
+                    echo "⚠️  [AVISO GOBERNANZA] Override forzado detectado para activo del núcleo: '$item'."
+                fi
+            fi
+        fi
+    done
+fi
+
+# ------------------------------------------------------------------------------
+# 3. Escáner SAST de Secretos, Credenciales y Rutas Privadas en Staging
+# ------------------------------------------------------------------------------
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -n "$STAGED_FILES" ]; then
+    # 3.1. Bloqueo estricto del directorio user_data/
+    if echo "$STAGED_FILES" | grep -E '^user_data/' >/dev/null; then
+        echo "❌ [ERROR DE SEGURIDAD] Se detectaron archivos del directorio confidencial 'user_data/' en staging."
+        echo "   La constitución de gobernanza prohíbe terminantemente versionar contenido de 'user_data/'."
+        exit 1
+    fi
+
+    # 3.2. Marcadores de conflicto Git sin resolver
+    CONFLICT_LINES=$(git diff --cached | grep -En '^\+[ ]*(<<<<<<<|=======|>>>>>>>)' || true)
+    if [ -n "$CONFLICT_LINES" ]; then
+        echo "❌ [ERROR DE CALIDAD] Marcadores de conflicto Git sin resolver detectados en el staging:"
+        echo "$CONFLICT_LINES" | head -n 3
+        exit 1
+    fi
+
+    # 3.3. Inspección de líneas añadidas en el diff preparado
+    DIFF_CONTENT=$(git diff --cached -U0 -- . ':(exclude).agent/hooks/pre-commit')
+    ADDED_LINES=$(echo "$DIFF_CONTENT" | grep -E '^\+[^\+]' || true)
+
+    if [ -n "$ADDED_LINES" ]; then
+        # Claves privadas
+        if echo "$ADDED_LINES" | grep -E '^\+[ ]*-----BEGIN (RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY' >/dev/null; then
+            echo "❌ [ERROR DE SEGURIDAD] Clave privada detectada en el diff preparado."
+            exit 1
+        fi
+
+        # Tokens conocidos y credenciales de API
+        TOKEN_REGEX='(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{82}|AKIA[0-9A-Z]{16}|sk_live_[0-9a-zA-Z]{24}|sk-(proj-)?[a-zA-Z0-9_-]{20,}|ant-api-key-[a-zA-Z0-9_-]+|https://(discord\.com|discordapp\.com)/api/webhooks/[0-9]+/[a-zA-Z0-9_-]+|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})'
+        if echo "$ADDED_LINES" | grep -E "^\+.*$TOKEN_REGEX" >/dev/null; then
+            echo "❌ [ERROR DE SEGURIDAD] Token de API, webhook o credencial detectada en el diff preparado."
+            exit 1
+        fi
+
+        # Rutas absolutas locales de usuario en SOs (/home/*, /Users/*, C:\Users\*)
+        GENERIC_USER_PATHS=$(echo "$ADDED_LINES" | grep -E '^\+.*(/home/[a-zA-Z0-9._-]+/|/Users/[a-zA-Z0-9._-]+/|[A-Za-z]:[/\\]Users[/\\][a-zA-Z0-9._-]+)' | grep -Ev 'ej\. |ejemplo|<usuario>|<user>|/home/usuario|/home/user|/home/runner' || true)
+        if [ -n "$GENERIC_USER_PATHS" ]; then
+            echo "⚠️  [ADVERTENCIA DE SEGURIDAD] Posible ruta absoluta local privada detectada en el diff:"
+            echo "$GENERIC_USER_PATHS" | head -n 3
+            echo "   Por favor, utiliza rutas relativas en lugar de rutas absolutas locales."
+            exit 1
+        fi
+
+        # Detección dinámica en tiempo de ejecución de la variable HOME local
+        if [ -n "${HOME:-}" ] && [ "$HOME" != "/" ]; then
+            CURRENT_HOME_MATCH=$(echo "$ADDED_LINES" | grep -F "$HOME" | grep -Ev 'ej\. |ejemplo|<usuario>|<user>' || true)
+            if [ -n "$CURRENT_HOME_MATCH" ]; then
+                echo "❌ [ERROR DE SEGURIDAD] Se detectó la ruta del directorio personal local en el diff preparado."
+                echo "$CURRENT_HOME_MATCH" | head -n 3
+                echo "   Sustitúyela por una ruta relativa antes de confirmar."
+                exit 1
+            fi
+        fi
+
+        # Patrones confidenciales locales cargados desde user_data/security/forbidden_patterns.txt
+        LOCAL_PATTERNS_FILE="$REPO_ROOT/user_data/security/forbidden_patterns.txt"
+        if [ -f "$LOCAL_PATTERNS_FILE" ]; then
+            while IFS= read -r pattern || [ -n "$pattern" ]; do
+                [[ -z "$pattern" || "$pattern" =~ ^[[:space:]]*# ]] && continue
+                MATCHES=$(echo "$ADDED_LINES" | grep -E "$pattern" || true)
+                if [ -n "$MATCHES" ]; then
+                    echo "❌ [ERROR DE SEGURIDAD] Coincidencia con patrón confidencial local (definido en user_data/security/forbidden_patterns.txt):"
+                    echo "$MATCHES" | head -n 3
+                    exit 1
+                fi
+            done < "$LOCAL_PATTERNS_FILE"
+        fi
+    fi
+fi
+
+echo "  ✔ [Seguridad] Verificación SAST de secretos y rutas privadas completada con éxito."
+
+# ------------------------------------------------------------------------------
+# 4. Hook Chaining Local: Extensión de Validaciones por Proyecto (Opcional)
+# ------------------------------------------------------------------------------
+LOCAL_HOOK="$REPO_ROOT/.agent/hooks/pre-commit-local.sh"
+if [ -f "$LOCAL_HOOK" ]; then
+    echo "  ⚙️  [Extension Hook] Ejecutando validaciones específicas locales (pre-commit-local.sh)..."
+    bash "$LOCAL_HOOK"
+fi
+
+echo "  ✔ [Pre-commit] Todas las comprobaciones obligatorias superadas."
+exit 0

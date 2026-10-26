@@ -1,0 +1,110 @@
+# ==============================================================================
+# SEGURIDAD, DATOS CONFIDENCIALES Y SECRETOS (SAS)
+# ==============================================================================
+# Datos de sesión, perfiles locales y espacio privado del desarrollador
+user_data/
+*.key
+*.pem
+*.cert
+*.crt
+*.p12
+*.jks
+*.token
+*.pat
+secrets.json
+auth.json
+setup-node-ssd.sh
+
+# Claves y variables de entorno (conservando siempre la plantilla de ejemplo)
+.env
+.env.*
+!.env.example
+
+# ==============================================================================
+# NODE.JS & GESTORES DE PAQUETES (NPM / YARN / PNPM)
+# ==============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+.npm/
+.eslintcache
+.stylelintcache
+
+# Configuración local de NPM (entorno específico de máquina o disco)
+.npmrc
+
+# Compilación y paquetes
+dist/
+build/
+out/
+
+# Cobertura y suites de prueba
+coverage/
+.nyc_output/
+
+# ==============================================================================
+# ASISTENTES DE IA (AI Coding Assistants & MCP Storage)
+# ==============================================================================
+.gemini/
+.claude/
+.cursor/
+.cline/
+.copilot/
+**/brain/
+**/transcripts/
+**/.system_generated/
+**/scratch/
+*mcp_config.local.json
+
+# Perfiles de navegadores automatizados o headless
+chrome_profile_*/
+firefox_profile_*/
+cookies.sqlite*
+*.cookies
+
+# ==============================================================================
+# LOGS, TEMPORALES Y CACHÉS GENÉRICAS
+# ==============================================================================
+*.log
+logs/
+*.pid
+temp/
+tmp/
+*.tmp
+*.temp
+*~
+*.bak
+*.swp
+*.swo
+
+# ==============================================================================
+# SISTEMA OPERATIVO Y DISCOS EXTERNOS (exFAT / FAT32 / NTFS / Sincronización)
+# ==============================================================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+.directory
+.netrwhist
+
+# Metadatos de unidades externas y herramientas de sincronización (FreeFileSync, etc.)
+System Volume Information/
+$RECYCLE.BIN/
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+*.ffs_db
+.sync.ffs_db
+
+# ==============================================================================
+# EDITORES DE CÓDIGO E IDES
+# ==============================================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.idea/
