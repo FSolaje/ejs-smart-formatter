@@ -1,0 +1,74 @@
+{
+  "name": "ejs-smart-formatter",
+  "displayName": "EJS Smart Formatter",
+  "description": "Formateador inteligente para plantillas EJS y HTML con soporte completo de bloques de control (<% if %>, <% forEach %>, <% switch %>), protección de atributos y normalización de etiquetas.",
+  "version": "1.0.0",
+  "publisher": "fsolaje-tools",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Formatters"
+  ],
+  "activationEvents": [
+    "onLanguage:ejs",
+    "onLanguage:html",
+    "onCommand:ejsSmartFormatter.formatDocument"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ejsSmartFormatter.formatDocument",
+        "title": "EJS: Formatear Documento EJS/HTML"
+      }
+    ],
+    "configuration": {
+      "title": "EJS Smart Formatter",
+      "properties": {
+        "ejsSmartFormatter.useEditorTabSize": {
+          "type": "boolean",
+          "default": true,
+          "description": "Usa el tamaño de tabulación (tabSize) configurado en VS Code. Si se desactiva, usa ejsSmartFormatter.tabSize."
+        },
+        "ejsSmartFormatter.tabSize": {
+          "type": "number",
+          "default": 4,
+          "description": "Número de espacios por nivel de sangría cuando useEditorTabSize es false."
+        },
+        "ejsSmartFormatter.indentEjsBlocks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Indenta automáticamente el contenido HTML y EJS dentro de bloques lógicos (<% if %>, <% forEach %>, <% for %>, <% switch %>)."
+        },
+        "ejsSmartFormatter.spaceInsideTags": {
+          "type": "boolean",
+          "default": true,
+          "description": "Normaliza los espacios internos en las etiquetas EJS (<%=x%> -> <%= x %>)."
+        },
+        "ejsSmartFormatter.quoteUnquotedEjsAttributes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Añade comillas dobles automáticamente a atributos HTML cuyo valor sea una etiqueta EJS sin comillas (src=<%= x %> -> src=\"<%= x %>\")."
+        },
+        "ejsSmartFormatter.fixDoubleOpenBracket": {
+          "type": "boolean",
+          "default": true,
+          "description": "Corrige automáticamente la errata <<% producida al expandir snippets después de escribir <."
+        },
+        "ejsSmartFormatter.selfClosingSpace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Añade un espacio antes de /> en etiquetas HTML autocerradas (<meta ... />)."
+        },
+        "ejsSmartFormatter.maxEmptyLines": {
+          "type": "number",
+          "default": 1,
+          "description": "Número máximo de líneas en blanco consecutivas permitidas."
+        }
+      }
+    }
+  }
+}
+
