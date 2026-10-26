@@ -1,5 +1,7 @@
 # EJS Smart Formatter (`fsolaje-tools.ejs-smart-formatter`)
 
+> **Versión de Entrega:** `v1.0.0`
+
 Formateador inteligente para plantillas **EJS** y **HTML** en Visual Studio Code / Antigravity, diseñado para resolver las limitaciones de los formateadores HTML tradicionales cuando trabajan con bloques de control EJS (`<% if %>`, `<% forEach %>`, `<% switch %>`).
 
 ## Características Principales
